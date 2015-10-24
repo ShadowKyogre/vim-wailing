@@ -1,3 +1,8 @@
+if !exists('s:wailing_did_init')
+	let s:timeout_cmd = expand("<sfile>:p:h") . '/wailing_timeout.sh'
+	let s:wailing_did_init = 1
+endif
+
 function! wailing#start()
 	if !exists("b:is_typing")
 		let b:old_is_typing = 1
@@ -7,10 +12,13 @@ function! wailing#start()
 	let b:is_typing = 0
 	if b:old_is_typing != b:is_typing
 		if exists("g:wailing_alert_fpath")
-			if !exists("b:alarm_socket")
-				let b:alarm_socket = tempname()
-				call system("mpv --loop " . shellescape(g:wailing_alert_fpath) . " --input-unix-socket " . shellescape(b:alarm_socket) . " &" )
-			else
+			let mpv_status = system("socat - " . shellescape(b:alarm_socket), 
+							 \ '{"command": ["get_property", "pause"]}')
+			echom '|' . mpv_status . '|'
+			if empty(mpv_status)
+				call system("mpv --loop " . shellescape(fnamemodify(g:wailing_alert_fpath, ':p'))
+				\ . " --input-unix-socket " . shellescape(b:alarm_socket) . " &" )
+			elseif mpv_status =~ '"data":true'
 				call system("socat - " . shellescape(b:alarm_socket), "no-osd set playback-time 0\n")
 				call system("socat - " . shellescape(b:alarm_socket), "no-osd set pause no\n")
 			endif
@@ -33,6 +41,10 @@ function! wailing#stop()
 endfunction
 
 function! wailing#teardown(manual)
+	if b:timeout_pid != -1
+		call system("kill " . b:timeout_pid)
+		let b:timeout_pid = -1
+	endif
 	if a:manual
 		if exists('b:alarm_socket')
 			call system("socat - " . shellescape(b:alarm_socket), "stop\n")
@@ -47,7 +59,29 @@ function! wailing#teardown(manual)
 	endif
 endfunction
 
-function! wailing#setup()
+function! wailing#setup(...)
+	if !exists('b:alarm_socket')
+		let b:alarm_socket = tempname()
+	endif
+	if a:0 > 0 && match(a:1, '\v^%(\d{1,2}:\d{2}:\d{2}|\d{1,2}:\d{2}|\d+)$') != -1
+		let clock_parts = split(a:1, ':')
+		let len_clock_parts = len(clock_parts)
+		if len_clock_parts == 1
+			let time_as_secs = str2nr(clock_parts[0])
+		elseif len_clockparts == 2
+			let time_as_secs = str2nr(clock_parts[0]) * 60 + str2nr(clock_parts[1])
+		elseif len_clockparts == 3
+			let time_as_secs = str2nr(clock_parts[0]) * 3600 + str2nr(clock_parts[1]) * 60 + str2nr(clock_parts[2])
+		else
+			let time_as_secs = 0
+		endif
+		if time_as_secs > 0
+			let b:timeout_pid = system(s:timeout_cmd . ' ' . time_as_secs
+			                    \ . ' ' . shellescape(b:alarm_socket) . ' &')
+		endif
+	else
+		let b:timeout_pid = -1
+	endif
 	augroup Wailing
 		autocmd! * <buffer>
 		autocmd CursorHoldI <buffer> call wailing#start()
