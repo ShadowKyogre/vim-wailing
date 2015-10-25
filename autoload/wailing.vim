@@ -15,7 +15,7 @@ function! wailing#start()
 			let mpv_status = system("socat - " . shellescape(b:alarm_socket), 
 							 \ '{"command": ["get_property", "pause"]}')
 			echom '|' . mpv_status . '|'
-			if empty(mpv_status)
+			if empty(mpv_status) || mpv_status =~ 'Connection refused'
 				call system("mpv --loop " . shellescape(fnamemodify(g:wailing_alert_fpath, ':p'))
 				\ . " --input-unix-socket " . shellescape(b:alarm_socket) . " &" )
 			elseif mpv_status =~ '"data":true'
@@ -41,16 +41,22 @@ function! wailing#stop()
 endfunction
 
 function! wailing#teardown(manual)
-	if b:timeout_pid != -1
-		call system("kill " . b:timeout_pid)
-		let b:timeout_pid = -1
-	endif
 	if a:manual
+		if b:timeout_pid != -1
+			call system("kill " . b:timeout_pid)
+			let b:timeout_pid = -1
+		endif
 		if exists('b:alarm_socket')
 			call system("socat - " . shellescape(b:alarm_socket), "stop\n")
 		endif
 		autocmd! Wailing * <buffer>
 	else
+		let curbuf = str2nr(expand('<abuf>'))
+		let timeout_pid = getbufvar(curbuf, 'timeout_pid', -1)
+		if timeout_pid != -1
+			call system("kill " . b:timeout_pid)
+			call setbufvar(curbuf, 'timeout_pid', -1)
+		endif
 		if !empty(getbufvar(str2nr(expand('<abuf>')), 'alarm_socket'))
 			let barm_socket = getbufvar(str2nr(expand('<abuf>')), 'alarm_socket')
 			call system("socat - " . shellescape(barm_socket), "stop\n")
@@ -78,10 +84,16 @@ function! wailing#setup(...)
 		if time_as_secs > 0
 			let b:timeout_pid = system(s:timeout_cmd . ' ' . time_as_secs
 			                    \ . ' ' . shellescape(b:alarm_socket) . ' &')
+		else
+			let b:timeout_pid = -1
 		endif
 	else
 		let b:timeout_pid = -1
 	endif
+	
+	let b:is_typing = 1
+	let b:old_is_typing = 1
+	
 	augroup Wailing
 		autocmd! * <buffer>
 		autocmd CursorHoldI <buffer> call wailing#start()
