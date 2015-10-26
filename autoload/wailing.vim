@@ -3,7 +3,7 @@ if !exists('s:wailing_did_init')
 	let s:wailing_did_init = 1
 endif
 
-function! wailing#start()
+function! s:WailingStart()
 	if !exists("b:is_typing")
 		let b:old_is_typing = 1
 	else
@@ -27,7 +27,7 @@ function! wailing#start()
 	endif
 endfunction
 
-function! wailing#stop()
+function! s:WailingStop()
 	if !exists("b:is_typing")
 		let b:is_typing = 1
 	endif
@@ -96,8 +96,8 @@ function! wailing#setup(...)
 	
 	augroup Wailing
 		autocmd! * <buffer>
-		autocmd CursorHoldI <buffer> call wailing#start()
-		autocmd TextChangedI <buffer> call wailing#stop()
+		autocmd CursorHoldI <buffer> call <SID>WailingStart()
+		autocmd TextChangedI <buffer> call <SID>WailingStop()
 		autocmd BufUnload <buffer> call wailing#teardown(0)
 	augroup END
 endfunction
