@@ -82,14 +82,46 @@ function! wailing#setup(...)
 			let time_as_secs = 0
 		endif
 		if time_as_secs > 0
-			let b:timeout_pid = system(s:timeout_cmd . ' ' . time_as_secs
+			let reward_exists = exists('g:wailing_reward_fpath')
+			let reward_start_exists = exists('g:wailing_reward_start')
+			let reward_end_exists = exists('g:wailing_reward_end')
+
+			if reward_exists
+				let reward_fpath = shellescape(fnamemodify(g:wailing_reward_fpath, ':p'))
+				if reward_start_exists
+					if reward_end_exists
+						let b:timeout_pid = system(s:timeout_cmd . ' ' . time_as_secs
+						        \ . ' ' . shellescape(b:alarm_socket) . ' '
+						        \ . reward_fpath . ' ' . printf('%f', g:wailing_reward_start)
+						        \ . ' ' . printf('%f', g:wailing_reward_end) . ' &')
+					else
+						let b:timeout_pid = system(s:timeout_cmd . ' ' . time_as_secs
+						        \ . ' ' . shellescape(b:alarm_socket) . ' '
+						        \ . reward_fpath . ' ' . printf('%f', g:wailing_reward_start) . ' &')
+					endif
+				else
+					let b:timeout_pid = system(s:timeout_cmd . ' ' . time_as_secs
+					            \ . ' ' . shellescape(b:alarm_socket) . ' '
+					            \ . reward_fpath . ' &')
+				endif
+			else
+				let b:timeout_pid = system(s:timeout_cmd . ' ' . time_as_secs
 			                    \ . ' ' . shellescape(b:alarm_socket) . ' &')
+			endif
 		else
 			let b:timeout_pid = -1
 		endif
 	else
 		let b:timeout_pid = -1
 	endif
+	
+	if exists('b:alarm_socket')
+		if b:timeout_pid != -1
+			call system("kill " . b:timeout_pid)
+		endif
+		call system("socat - " . shellescape(b:alarm_socket), "stop\n")
+	endif
+
 	
 	let b:is_typing = 1
 	let b:old_is_typing = 1
